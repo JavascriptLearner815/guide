@@ -221,6 +221,35 @@ setTimeout(() => timestamps.delete(message.author.id), cooldownAmount);
 
 This line causes the entry for the message author under the specified command to be deleted after the command's cooldown time is expired for this user.
 
+## Cooldown messages
+
+::: tip
+This section is a follow-up and bases its code off of [the previous section](#cooldowns).
+:::
+
+Having a cooldown to prevent spam is great, but it's slightly better UX to have a helpful tip or even just an entertaining response.
+
+One example usage of this could be in `kick.js`:
+
+```diff
+module.exports = {
+	name: 'kick',
++   cooldownMessage: 'woah, slow down on the kicks',
+```
+
+Go back to where you made the response that the bot makes if you have an active cooldown, and add this in place of the `return` statement:
+
+```js
+// if (now < expirationTime) {
+// ...
+if (command.cooldownMessage) {
+	return message.reply(`${cooldownMessage}, please wait ${timeLeft.toFixed(1)} more second(s) before reusing the \`${command.name}\` command.`);
+} else {
+	return message.reply(`please wait ${timeLeft.toFixed(1)} more second(s) before reusing the \`${command.name}\` command.`);
+}
+// }
+```
+
 ## Command aliases
 
 It's a good idea to allow users to trigger your commands in more than one way; it gives them the freedom of choosing what to send and may even make some command names easier to remember. Luckily, setting up aliases for your commands is quite simple.
@@ -269,6 +298,56 @@ Making those two small changes, you get this:
 		<img src="https://cdn.discordapp.com/avatars/328037144868290560/1cc0a3b14aec3499632225c708451d67.png" alt="" />
 	</discord-message>
 </div>
+
+## Command permissions
+
+In this section you will be adding permission requirements to the command handler we established so far. To do so you need to add at a `permissions` key to your existing command options. We will use the 'kick' command to demonstrate:
+
+```diff
+module.exports = {
+	name: 'kick',
+	description: 'Kick a user from the server.',
+	guildOnly: true,
++	permissions: ['KICK_MEMBERS'],
+	execute(message, args) {
+		// ...
+	},
+};
+```
+
+You also need to check for those permissions before executing the command, which is done in the main file, as shown below. We use `TextChannel#permissionsFor` in combination with `Permissions#has` rather than `Guildmember#hasPermission` to respect permission overwrites in our check.
+
+```diff
+// ...
+if (command.guildOnly && message.channel.type === 'dm') {
+	return message.reply('I can\'t execute that command inside DMs!');
+}
+
++ if (command.permissions) {
++       const authorPerms = message.channel.permissionsFor(message.author);
++ 
++       if (!authorPerms) return message.reply('you cannot do this!');
++ 
++       for (const permission of command.permissions) {
++         if (!authorPerms.has(permission)) return message.reply('you cannot do this!');
++       }
++ 
++       const myPerms = message.channel.permissionsFor(message.client.user);
++ 
++       for (const permission of command.permissions) {
++         if (!myPerms.has(permission)) return message.reply('*I* cannot do this myself!');
++       }
++ }
+
+if (command.args && !args.length) {
+// ...
+```
+
+Your command handler will now refuse to execute commands if the permissions you specify in the command structure are missing either from the member trying to use it or the bot. Note that the `ADMINISTRATOR` permission as well as the message author being the owner of the guild will overwrite this.
+
+:::tip
+Need more resources on how Discord's permission system works? Check the [permissions article](/popular-topics/permissions.html), [extended permissions knowledge base](/popular-topics/permissions-extended.html) and documentation of <branch version="11.x" inline>[permission flags](https://discord.js.org/#/docs/main/v11/class/Permissions?scrollTo=s-FLAGS)</branch><branch version="12.x" inline>[permission flags](https://discord.js.org/#/docs/main/stable/class/Permissions?scrollTo=s-FLAGS)</branch> out! 
+:::
 
 ## A dynamic help command
 
@@ -352,9 +431,13 @@ data.push(`**Name:** ${command.name}`);
 
 if (command.aliases) data.push(`**Aliases:** ${command.aliases.join(', ')}`);
 if (command.description) data.push(`**Description:** ${command.description}`);
-if (command.usage) data.push(`**Usage:** ${prefix}${command.name} ${command.usage}`);
+if (command.usage) data.push(`**Usage:** \`${prefix}${command.name} ${command.usage}\``);
+if (command.permissions) data.push(`**Permissions:** ${command.permissions.join(', ')}`);
+if (command.guildOnly) data.push('Command is **server-only**');
+if (command.args) data.push('An **argument** is required');
 
 data.push(`**Cooldown:** ${command.cooldown || 3} second(s)`);
+data.push(`\nYou can send \`${prefix}help\` to get a list of all commands!`);
 
 message.channel.send(data, { split: true });
 ```
@@ -387,47 +470,6 @@ No more manually editing your help command! If you aren't completely satisfied w
 
 ::: tip
 If you want to add categories or other information to your commands you can simply add properties reflecting it to your `module.exports`. If you only want to show a subset of commands remember that `commands` is a Collection you can <branch version="11.x" inline>[filter](https://discord.js.org/#/docs/main/v11/class/Collection?scrollTo=filter)</branch><branch version="12.x" inline>[filter](https://discord.js.org/#/docs/collection/master/class/Collection?scrollTo=filter)</branch> to fit your specific needs!
-:::
-
-## Command permissions
-
-In this section you will be adding permission requirements to the command handler we established so far. To do so you need to add at a `permissions` key to your existing command options. We will use the 'kick' command to demonstrate:
-
-```diff
-module.exports = {
-	name: 'kick',
-	description: 'Kick a user from the server.',
-	guildOnly: true,
-+	permissions: 'KICK_MEMBERS',
-	execute(message, args) {
-		// ...
-	},
-};
-```
-
-You also need to check for those permissions before executing the command, which is done in the main file, as shown below. We use `TextChannel#permissionsFor` in combination with `Permissions#has` rather than `Guildmember#hasPermission` to respect permission overwrites in our check.
-
-```diff
-// ...
-if (command.guildOnly && message.channel.type === 'dm') {
-	return message.reply('I can\'t execute that command inside DMs!');
-}
-
-+ if (command.permissions) {
-+ 	const authorPerms = message.channel.permissionsFor(message.author);
-+ 	if (!authorPerms || !authorPerms.has(command.permissions)) {
-+ 		return message.reply('You can not do this!');
-+ 	}
-+ }
-
-if (command.args && !args.length) {
-// ...
-```
-
-Your command handler will now refuse to execute commands if the permissions you specify in the command structure are missing from the member trying to use it. Note that the `ADMINISTRATOR` permission as well as the message author being the owner of the guild will overwrite this.
-
-:::tip
-Need more resources on how Discord's permission system works? Check the [permissions article](/popular-topics/permissions.html), [extended permissions knowledge base](/popular-topics/permissions-extended.html) and documentation of <branch version="11.x" inline>[permission flags](https://discord.js.org/#/docs/main/v11/class/Permissions?scrollTo=s-FLAGS)</branch><branch version="12.x" inline>[permission flags](https://discord.js.org/#/docs/main/stable/class/Permissions?scrollTo=s-FLAGS)</branch> out! 
 :::
 
 ## Reloading commands
