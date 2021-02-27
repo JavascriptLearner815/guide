@@ -243,7 +243,7 @@ Go back to where you made the response that the bot makes if you have an active 
 // if (now < expirationTime) {
 // ...
 if (command.cooldownMessage) {
-	return message.reply(`${cooldownMessage}, please wait ${timeLeft.toFixed(1)} more second(s) before reusing the \`${command.name}\` command.`);
+	return message.reply(`${command.cooldownMessage}, please wait ${timeLeft.toFixed(1)} more second(s) before reusing the \`${command.name}\` command.`);
 } else {
 	return message.reply(`please wait ${timeLeft.toFixed(1)} more second(s) before reusing the \`${command.name}\` command.`);
 }
